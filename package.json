@@ -1,0 +1,25 @@
+{
+  "name": "anode_realsense",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "install": "node-gyp rebuild"
+  },
+  "gypfile": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grrrwaaa/anode_realsense.git"
+  },
+  "author": "Artificial Nature (Haru Ji & Graham Wakefield)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/grrrwaaa/anode_realsense/issues"
+  },
+  "homepage": "https://github.com/grrrwaaa/anode_realsense#readme",
+  "dependencies": {
+    "bindings": "1.5.0",
+    "gl-matrix": "^3.4.3",
+    "node-addon-api": "^3.1.0"
+  }
+}
