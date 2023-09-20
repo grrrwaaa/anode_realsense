@@ -19,7 +19,7 @@ int wrap(int a, int n) {
 	return r < 0 ? r + n : r; //a % n + (Math.sign(a) !== Math.sign(n) ? n : 0); 
 }
 
- struct Pipeline : public Napi::ObjectWrap<Pipeline> {
+ struct Camera : public Napi::ObjectWrap<Camera> {
 
 	// Create a Pipeline - this serves as a top-level API for streaming and processing frames
 	rs2::pipeline p;
@@ -56,7 +56,7 @@ int wrap(int a, int n) {
 // 	sl::Resolution capture_res;
 // 	uint64_t ms = 0;
 
-    Pipeline(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Pipeline>(info) {
+    Camera(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Camera>(info) {
 		Napi::Env env = info.Env();
 		Napi::Object This = info.This().As<Napi::Object>();
 
@@ -67,113 +67,39 @@ int wrap(int a, int n) {
 		accel[1] = 0;
 		accel[2] = -10;
 
-	//	if (info.Length()) open(info);
+		if (info.Length()) start(info);
 	}
 
 	Napi::Value start(const Napi::CallbackInfo& info) {
 		Napi::Env env = info.Env();
 		Napi::Object This = info.This().As<Napi::Object>();
 
-// 		// expect some configuration here
+ 		// expect some configuration here
  		const Napi::Object options = info.Length() ? info[0].ToObject() : Napi::Object::New(env);
 
-		//config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+		// 0 means "any"
+		int width = (options.Has("width")) ? options.Get("width").ToNumber().Uint32Value() : 0;
+		int height = (options.Has("height")) ? options.Get("height").ToNumber().Uint32Value() : 0;
+		int fps = (options.Has("fps")) ? options.Get("fps").ToNumber().Uint32Value() : 0;
+
+		if (options.Has("serial")) {
+			// try to open device by serial
+			printf("open device %s\n", options.Get("serial").ToString().Utf8Value().c_str());
+			config.enable_device(options.Get("serial").ToString().Utf8Value().c_str());
+		} 
+
+		config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+		config.enable_stream(RS2_STREAM_DEPTH, width, height, RS2_FORMAT_Z16, fps);
 
 		// Configure and start the pipeline
 		p.start(config);
 
-// 		sl::InitParameters init_parameters;
-// 		init_parameters.depth_mode = sl::DEPTH_MODE::PERFORMANCE;
-// 		init_parameters.Pipeline_resolution = sl::RESOLUTION::HD720;
-// 		init_parameters.Pipeline_fps = 30;
-// 		init_parameters.coordinate_units = sl::UNIT::METER;
-
-// 		sl::RuntimeParameters runtime_parameters;
-// 		//runtime_parameters.sensing_mode = SENSING_MODE::FILL;
-		
-// 		// from SVO file:
-// 		//init_parameters.input.setFromSVOFile(input_path);
-// 		// from IP stream:
-// 		// ..
-// 		if (options.Has("serial")) {
-// 			// try to open device by serial
-// 			uint32_t z = options.Get("serial").ToNumber().Uint32Value();
-// 			init_parameters.input.setFromSerialNumber(z);
-// 		} else if (options.Has("id")) {
-// 			// try to open device by id
-// 			uint32_t z = options.Get("id").ToNumber().Uint32Value();
-// 			init_parameters.input.setFromPipelineID(z);
-// 		} 
-
-// 		sl::ERROR_CODE err = zed.open(init_parameters);
-// 		if (err != sl::ERROR_CODE::SUCCESS) {
-// 			 throw Napi::Error::New(env, sl::toString(err).get());
-// 		}
-
-// 		auto cam_info = zed.getPipelineInformation();
-// 		//cout << cam_info.Pipeline_model << ", ID: " << z << ", SN: " << cam_info.serial_number << " Opened" << endl;
-
-// 		This.Set("serial", cam_info.serial_number);
-// 		This.Set("model", sl::toString(cam_info.Pipeline_model).get());
-// 		This.Set("input_type", sl::toString(cam_info.input_type).get());
-
-// 		// has calibration parameters, firmware, fps, resolution:
-// 		//This.Set("Pipeline_configuration", sl::toString(cam_info.Pipeline_configuration).get());
-// 		This.Set("firmware_version", cam_info.Pipeline_configuration.firmware_version);
-// 		This.Set("fps", cam_info.Pipeline_configuration.fps);
-		
-// 		auto resolution = cam_info.Pipeline_configuration.resolution;
-// 		This.Set("width", resolution.width);
-// 		This.Set("height", resolution.height);
-
-// 		size_t subdiv = 1;
-// 		capture_res.width = resolution.width / subdiv;
-// 		capture_res.height = resolution.height / subdiv;
-
-// 		// CalibrationParameters calibration_params = zed.getPipelineInformation()->calibration_parameters;
-// 		// // Focal length of the left eye in pixels
-// 		// float focal_left_x = calibration_params.left_cam.fx;
-// 		// // First radial distortion coefficient
-// 		// float k1 = calibration_params.left_cam.disto[0];
-// 		// // Translation between left and right eye on z-axis
-// 		// float tz = calibration_params.T.z;
-// 		// // Horizontal field of view of the left eye in degrees
-// 		// float h_fov = calibration_params.left_cam.h_fov;
-
-// 		// has firmware, imu, barometer, magnetometer etc.
-// 		//This.Set("sensors_configuration", sl::toString(cam_info.sensors_configuration).get());
-
-// 		// Pipeline settings:
-// 		// Set exposure to 50% of Pipeline framerate
-// 		// zed.setPipelineSettings(VIDEO_SETTINGS::EXPOSURE, 50);
-// 		// // Set white balance to 4600K
-// 		// zed.setPipelineSettings(VIDEO_SETTINGS::WHITE_BALANCE, 4600);
-// 		// // Reset to auto exposure
-// 		// zed.setPipelineSettings(VIDEO_SETTINGS::EXPOSURE, VIDEO_SETTINGS_VALUE_AUTO);
-
-// 		// allocate some memory to store the Left/Depth images
-// 		cloud.alloc(capture_res, sl::MAT_TYPE::F32_C4);
-// 		This.Set("cloud", Napi::TypedArrayOf<float>::New(env, 
-// 			4 * capture_res.width * capture_res.height,
-// 			Napi::ArrayBuffer::New(env, cloud.getPtr<float>(), cloud.getStepBytes() * cloud.getHeight()),
-// 			0,
-// 			napi_float32_array)
-// 		);
-
-// 		normals.alloc(capture_res, sl::MAT_TYPE::F32_C4);
-// 		This.Set("normals", Napi::TypedArrayOf<float>::New(env, 
-// 			4 * capture_res.width * capture_res.height,
-// 			Napi::ArrayBuffer::New(env, normals.getPtr<float>(), normals.getStepBytes() * normals.getHeight()),
-// 			0,
-// 			napi_float32_array)
-// 		);
-
 		return This;
 	}
 
-	~Pipeline() {
+	~Camera() {
 		//zed_close();
-		printf("~Pipeline\n");
+		printf("~Camera\n");
 	}
 
 
@@ -233,6 +159,8 @@ int wrap(int a, int n) {
 		// Get the depth frame's dimensions
 		int width = depth.get_width();
 		int height = depth.get_height();
+		This.Set("width", width);
+		This.Set("height", height);
 		const size_t num_vertices = width * height;
 		const size_t num_floats = num_vertices * 3;
 		size_t MAX_NUM_INDICES = num_vertices;
@@ -293,7 +221,11 @@ int wrap(int a, int n) {
 		int index_count = 0;
 		for (int i=0; i<num_vertices; i++) {
 			glm::vec3& v = vertices[i];
-			v = glm::vec3(transform * glm::vec4(raw_vertices[i], 1.));
+			const glm::vec3& rv = raw_vertices[i];
+
+			// intel coordinate system is weird: y is down, z is forward. we need to flip that.
+			// we also apply the modelmatrix here
+			v = glm::vec3(transform * glm::vec4(rv.x, -rv.y, -rv.z, 1.));
 
 			// meshless index array:
 			if (v.x > min.x && v.y > min.y && v.z > min.z && v.x < max.x && v.y < max.y && v.z < max.z) {
@@ -641,6 +573,65 @@ int wrap(int a, int n) {
 class Module : public Napi::Addon<Module> {
 public:
 
+	/*
+		Returns array
+	*/
+	Napi::Value devices(const Napi::CallbackInfo& info) {
+		Napi::Env env = info.Env();
+		Napi::Object devices = Napi::Array::New(env);
+
+		rs2::device_list devList = rs2::context().query_devices();
+		for (int i = 0; i < devList.size(); i++) {
+			Napi::Object device = Napi::Object::New(env);
+			rs2::device& dev = devList[i];
+
+			// Friendly name
+			device.Set("name", dev.get_info(RS2_CAMERA_INFO_NAME));
+
+			// Device serial number
+			device.Set("serial", dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER ));
+
+			// // Primary firmware version
+			device.Set("firmware", dev.get_info(RS2_CAMERA_INFO_FIRMWARE_VERSION ));
+
+			// // Recommended firmware version
+			// device.Set("recommended_firmware", dev.get_info(RS2_CAMERA_INFO_RECOMMENDED_FIRMWARE_VERSION ));
+
+			// Unique identifier of the port the device is connected to (platform specific)
+			device.Set("physical_port", dev.get_info(RS2_CAMERA_INFO_PHYSICAL_PORT ));
+
+			// // If device supports firmware logging, this is the command to send to get logs from firmware
+			// //device.Set("recommended_firmware", dev.get_info(RS2_CAMERA_INFO_DEBUG_OP_CODE ));
+
+			// // True iff the device is in advanced mode
+			// device.Set("advanced_mode", dev.get_info(RS2_CAMERA_INFO_ADVANCED_MODE ));
+
+			// Product ID as reported in the USB descriptor
+			device.Set("product_id", dev.get_info(RS2_CAMERA_INFO_PRODUCT_ID ));
+
+			// // True iff EEPROM is locked
+			// device.Set("eeprom_locked", dev.get_info(RS2_CAMERA_INFO_CAMERA_LOCKED ));
+
+			// // Designated USB specification: USB2/USB3
+			device.Set("usb_type", dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR ));
+
+			// // Device product line D400/SR300/L500/T200
+			device.Set("product_line", dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE ));
+	
+			// // ASIC serial number
+			// device.Set("asic_serial_number", dev.get_info(RS2_CAMERA_INFO_ASIC_SERIAL_NUMBER ));
+	
+			// // Firmware update ID
+			// device.Set("firmware_update_id", dev.get_info(RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID ));
+
+			// // IP address for remote camera.
+			//device.Set("ip", dev.get_info(RS2_CAMERA_INFO_IP_ADDRESS ));
+
+			devices[i] = device;
+		}
+		return devices;
+	}
+
 	// /*
 	// 	Returns array
 	// */
@@ -667,6 +658,7 @@ public:
 	Module(Napi::Env env, Napi::Object exports) {
 		// See https://github.com/nodejs/node-addon-api/blob/main/doc/class_property_descriptor.md
 		DefineAddon(exports, {
+			InstanceAccessor<&Module::devices>("devices"),
 			// InstanceMethod("start", &Module::start),
 			// InstanceMethod("end", &Module::end),
 			// //InstanceMethod("test", &Module::test),
@@ -679,13 +671,13 @@ public:
 		});
 		
 		// This method is used to hook the accessor and method callbacks
-		Napi::Function ctor = Pipeline::DefineClass(env, "Pipeline", {
-			Pipeline::InstanceMethod<&Pipeline::start>("start"),
-		// 	Pipeline::InstanceMethod<&Pipeline::close>("close"),
-		// 	Pipeline::InstanceMethod<&Pipeline::isOpened>("isOpened"),
-			Pipeline::InstanceMethod<&Pipeline::grab>("grab"),
-			Pipeline::InstanceMethod<&Pipeline::voxels>("voxels"),
-			//Pipeline::InstanceMethod<&Pipeline::grab>("get_active_profile"),
+		Napi::Function ctor = Camera::DefineClass(env, "Camera", {
+			Camera::InstanceMethod<&Camera::start>("start"),
+		// 	Camera::InstanceMethod<&Camera::close>("close"),
+		// 	Camera::InstanceMethod<&Camera::isOpened>("isOpened"),
+			Camera::InstanceMethod<&Camera::grab>("grab"),
+			Camera::InstanceMethod<&Camera::voxels>("voxels"),
+			//Camera::InstanceMethod<&Camera::grab>("get_active_profile"),
 		});
 
 		// Create a persistent reference to the class constructor. This will allow
@@ -693,7 +685,7 @@ public:
 		// called on instance of a class to be distinguished from each other.
 		Napi::FunctionReference* constructor = new Napi::FunctionReference();
 		*constructor = Napi::Persistent(ctor);
-		exports.Set("Pipeline", ctor);
+		exports.Set("Camera", ctor);
 		// Store the constructor as the add-on instance data. This will allow this
 		// add-on to support multiple instances of itself running on multiple worker
 		// threads, as well as multiple instances of itself running in different
