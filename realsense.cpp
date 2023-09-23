@@ -86,6 +86,8 @@ int wrap(int a, int n) {
 			// try to open device by serial
 			printf("open device %s\n", options.Get("serial").ToString().Utf8Value().c_str());
 			config.enable_device(options.Get("serial").ToString().Utf8Value().c_str());
+
+			This.Set("serial", options.Get("serial"));
 		} 
 
 		config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);

@@ -16,6 +16,11 @@
   "bugs": {
     "url": "https://github.com/grrrwaaa/anode_realsense/issues"
   },
+  "nodemonConfig": {
+    "ignore": [
+      "*.json"
+    ]
+  },
   "homepage": "https://github.com/grrrwaaa/anode_realsense#readme",
   "dependencies": {
     "bindings": "1.5.0",

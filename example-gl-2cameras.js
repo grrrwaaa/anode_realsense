@@ -9,63 +9,31 @@ module.paths.push(path.resolve(path.join(__dirname, "..", "anode_gl")))
 const gl = require('gles3.js'),
 	glfw = require('glfw3.js'),
     Window = require("window.js"),
-	glutils = require('glutils.js')
+	glutils = require('glutils.js'),
+	Shaderman = require('shaderman.js'),
+	Config = require('config.js')
 
 const { vec2, vec3, vec4, quat, mat2, mat2d, mat3, mat4} = require("gl-matrix")
 
 const realsense = require("./realsense.js")
 console.log(realsense.devices)
 
+
+let calibration = Config("calibration.json")
+console.log(calibration)
+
 // the view will be oriented to the screen
 // near & far set the effective minimum and maximum distance from the screen (in meters) that data is rendered:
 let near = 0.1, far = 10 
 
-let window = new Window()
+let window = new Window({
+	width: 1920,
+	height: 1080,
+})
 
+const shaderman = new Shaderman(gl)
 
-let cloudprogram = glutils.makeProgram(gl, `#version 330
-uniform mat4 u_viewmatrix;
-uniform mat4 u_projmatrix;
-uniform float u_pixelsize;
-uniform vec4 u_color;
-layout(location = 0) in vec4 a_position;
-layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec2 a_texCoord;
-//layout(location = 3) in vec4 a_color;
-out vec4 v_color;
-
-void main() {
-	// Multiply the position by the matrix.
-	vec4 viewpos = u_viewmatrix * vec4(a_position.xyz, 1);
-	gl_Position = u_projmatrix * viewpos;
-	if (gl_Position.w > 0.0) {
-		gl_PointSize = u_pixelsize / gl_Position.w;
-	} else {
-		gl_PointSize = 0.0;
-	}
-
-	v_color = vec4(1.);
-	//v_color = vec4(a_texCoord, 0.5, 1.);
-	//v_color = vec4(a_normal*0.5+0.5, 1.);
-	v_color = u_color;
-}
-`, 
-`#version 330
-precision mediump float;
-
-in vec4 v_color;
-layout(location = 0) out vec4 outColor;
-
-void main() {
-	// get normalized -1..1 point coordinate
-	vec2 pc = (gl_PointCoord - 0.5) * 2.0;
-	// convert to distance:
-	float dist = max(0., 1.0 - length(pc));
-	// paint
-  	outColor = v_color * dist;
-}
-`);
-
+const flat_fbo = glutils.makeGbuffer(gl, window.width, window.height, [{}]);
 
 let cameras = realsense.devices.map((dev, i) => {
 	let cam = new realsense.Camera({
@@ -74,16 +42,11 @@ let cameras = realsense.devices.map((dev, i) => {
 		fps: 30
 	})
 
-	cam.pos = [-(0.5-i)*1.45, 1.8, 0]
-	cam.rotation = (0.5-i)*-Math.PI * 0.6
-
 	cam.modelmatrix = mat4.create();
 	cam.maxarea = 0.0001
 	cam.min = [-10, -10, -10]
 	cam.max = [10, 10, 10]
 	cam.grab(true) // true means wait for a result
-
-	//console.log(cam)
 
 	const NUM_POINTS = cam.width * cam.height // = 307200
 
@@ -116,12 +79,12 @@ window.draw = function() {
 	cameras.forEach(cam => {
 		if (cam.grab(false, 0.0001)) {
 			if (true || t < 10) {
+				let calib = calibration[cam.serial]
+				if (calib) Object.assign(cam, calib)
 				cam.calibrate(cam.pos, cam.rotation)
 			}
 	
 			cam.points_vao.bind().submit()
-	
-			//console.log(cam.count, points.geom.vertices.slice(0, 3))
 		}
 	})
 
@@ -132,7 +95,7 @@ window.draw = function() {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	mat4.identity(viewmatrix)
-	let a = t
+	let a = t * 1
 	let z = -1
 	let r = 2
 	let h = 1 // height of rendering camera above ground
@@ -148,7 +111,7 @@ window.draw = function() {
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-	let shader = cloudprogram.begin()
+	let shader = shaderman.shaders.cloud.begin()
 	.uniform ( "u_viewmatrix", viewmatrix)
 	.uniform ( "u_projmatrix", projmatrix)
 	.uniform ( "u_pixelsize", dim[1] / 500)
