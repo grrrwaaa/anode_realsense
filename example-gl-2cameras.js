@@ -46,7 +46,8 @@ void main() {
 
 	v_color = vec4(1.);
 	//v_color = vec4(a_texCoord, 0.5, 1.);
-	v_color = vec4(a_normal*0.5+0.5, 1.);
+	//v_color = vec4(a_normal*0.5+0.5, 1.);
+	v_color = u_color;
 }
 `, 
 `#version 330
@@ -73,8 +74,8 @@ let cameras = realsense.devices.map((dev, i) => {
 		fps: 30
 	})
 
-	cam.pos = [-(0.5-i), 1.25, 0]
-	cam.rotation = (0.5-i)*Math.PI/2
+	cam.pos = [-(0.5-i)*1.45, 1.8, 0]
+	cam.rotation = (0.5-i)*-Math.PI * 0.6
 
 	cam.modelmatrix = mat4.create();
 	cam.maxarea = 0.0001
@@ -115,45 +116,7 @@ window.draw = function() {
 	cameras.forEach(cam => {
 		if (cam.grab(false, 0.0001)) {
 			if (true || t < 10) {
-				let { axisy, modelmatrix } = cam;
-				// in the first 10 seconds, use accelerometer data to adjust our orientation
-				let a = vec3.clone(cam.accel)
-				vec3.normalize(a, a)
-				vec3.lerp(axisy, axisy, a, 0.1)
-				vec3.normalize(axisy, axisy)
-
-				// the up (Y) axis of our camera view is opposite to gravity, i.e. -cam.accel
-
-				// we assume that the camera's X axis is
-
-				// OK so that tells us what our axis z is supposed to be. 
-	
-				let axisz = vec3.cross(vec3.create(), axisy, [axisy[2], axisy[0], axisy[1]])
-				vec3.normalize(axisz, axisz)
-				let axisx = vec3.cross(vec3.create(), axisy, axisz)
-				vec3.normalize(axisz, axisz)
-	
-				let cammatrix = mat4.create()
-				mat4.set(cammatrix, 
-					axisx[0], axisy[0], axisz[0], 0.,
-					axisx[1], axisy[1], axisz[1], 0.,
-					axisx[2], axisy[2], axisz[2], 0.,
-					0, 0, 0, 1);
-	
-				// this process has probably left our axisx and axisz not properly rotated to the XZ plane anymore
-				// I'd like to rotateY to ensure that axisx is maximal in +x
-				// get the rotation around Y that would make axisx.x maximal:
-				let m = mat4.create()
-				mat4.fromRotation(m, -Math.acos(cammatrix[0]), [0, 1, 0])
-				mat4.multiply(cammatrix, m, cammatrix)
-	
-				// now generate our camera's modelmatrix
-				mat4.identity(modelmatrix)
-				mat4.translate(modelmatrix, modelmatrix, cam.pos)
-				mat4.rotateY(modelmatrix, modelmatrix, cam.rotation)
-				mat4.multiply(modelmatrix, modelmatrix, cammatrix)
-	
-				//console.log(cam.modelmatrix)
+				cam.calibrate(cam.pos, cam.rotation)
 			}
 	
 			cam.points_vao.bind().submit()
@@ -170,20 +133,27 @@ window.draw = function() {
 
 	mat4.identity(viewmatrix)
 	let a = t
-	let r = 1
-	mat4.lookAt(viewmatrix, [r*Math.sin(a), 0, r*Math.cos(a)], [0, 0, 0], [0, 1, 0])
-	mat4.perspective(projmatrix, Math.PI * 0.7, dim[0]/dim[1], near, far)
+	let z = -1
+	let r = 2
+	let h = 1 // height of rendering camera above ground
+	let at = [0, h, z]
+	let eye = [Math.sin(a), 0, Math.cos(a)]
+	vec3.scale(eye, eye, r)
+	vec3.add(eye, eye, at)
+	mat4.lookAt(viewmatrix, eye, at, [0, 1, 0])
+	mat4.perspective(projmatrix, Math.PI * 0.3, dim[0]/dim[1], near, far)
 
 	gl.disable(gl.DEPTH_TEST)
 	gl.depthMask(false);
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-	cloudprogram.begin()
+	let shader = cloudprogram.begin()
 	.uniform ( "u_viewmatrix", viewmatrix)
 	.uniform ( "u_projmatrix", projmatrix)
 	.uniform ( "u_pixelsize", dim[1] / 500)
-	cameras.forEach(cam => {
+	cameras.forEach((cam, i) => {
+		shader.uniform( "u_color", [i, 1-i, 1, 1])
 		cam.points_vao.bind().drawPoints().unbind()
 	})
 	//show_shader.begin()

@@ -115,36 +115,118 @@ window.draw = function() {
 			vec3.scale(a, a, -1)
             vec3.lerp(axisy, axisy, a, 0.25)
             vec3.normalize(axisy, axisy)
+			let axisx, axisz, other_axis
 
-            let axisz = vec3.cross(vec3.create(), axisy, [1, 0, 0])//[axisy[2], axisy[0], axisy[1]])
-            vec3.normalize(axisz, axisz)
-            let axisx = vec3.cross(vec3.create(), axisy, axisz)
-            vec3.normalize(axisz, axisz)
+			//console.log("up", axisy.join(",, "))
+			//console.log(Math.abs(axisy[0]), Math.abs(axisy[1]), Math.abs(axisy[2]))
 
-            let cammatrix = mat4.create()
-            // mat4.set(cammatrix, 
-            //     axisx[0], axisy[0], axisz[0], 0.,
-            //     axisx[1], axisy[1], axisz[1], 0.,
-            //     axisx[2], axisy[2], axisz[2], 0.,
-            //     0, 0, 0, 1);
-			mat4.set(cammatrix, 
+			// ok so now we know which axis points up. It could be anything, including 0,0,1,  1,0,0,  0,1,0, etc. 
+			// we want to rotate the cloud so that axisy becomes 0,1,0
+			// the usual method is to use cross products with some other axis orthogonal to axisy in order to build up a coordinate frame
+			// there's an infinite set of solutions, because there's an infinite set of possible orthogonal axes
+			// (because we can still rotate around axisy to get any axisx/z direction)
+			// what axis we use will determine that rotation
+
+			// observation: if we rotate mostly around the forward (-z) axis of the camera, then the Z component of the accelerometer doesn't really change. 
+			// that should mean that we can use the angle of axisy.xy to derive our rotation about the camera's view axis
+			let zrot = Math.atan2(axisy[0], axisy[1])  // this is zero when the camera mount is most downward, i.e. no z rotation
+			//console.log(180/Math.PI * zrot)
+
+			// if we invert this rotation on the point cloud, it should always put the floor at the bottom
+			// (yes it does, though there's gimbal issue of course when camera faces up/down)
+			let z_mat = mat4.fromZRotation(mat4.create(), -zrot)
+
+			// next observation: rotation around the camera's own +x axis makes no change to up.x
+			// so camera-relative rotation is atan2() of up.yz
+			let xrot = Math.atan2(axisy[2], axisy[1])  // this is zero when the camera mount is most downward, i.e. no z rotation
+			console.log(180/Math.PI * xrot)
+			// but that's not helpful -- what we care about is x rotation relative to ground, not relative to the camera
+			let x_mat = mat4.fromXRotation(mat4.create(), -xrot)
+
+
+
+			// we'd like to pick that axis such that a typical raw camera point of 0,0,-1 would still end up in the same ballpark of -z after rotation (and certainly not end up in +z)
+
+
+			// however that won't work if the camera is mostly looking straight up or down; 
+			// (i.e. axisy's Z component has the greatest magnitude)
+			let mostly_up_or_down = Math.abs(axisy[2]) > Math.abs(axisy[0]) && Math.abs(axisy[2]) > Math.abs(axisy[1])
+			let mostly_up = mostly_up_or_down && (axisy[2] < 0)
+			// in that case we can only optimize for a point at -1,0,0 ending up in -x)
+
+			// one way is to just swizzle the axisy components to get some arbitrary orthogonal axis, 
+			// but that will leave us with a rotation that is randomly dependent on axisy
+			// another way is to pick whichever normal axis (X, Y or Z) that is least similar to the axisy
+			// (the smallest absolute dot product)
+			// use 1,0,0 if abs(axisy[0]) is smallest, etc. 
+
+			// are we looking mostly up/down?
+			// true if Y component of axisy is greatest
+			
+			if (Math.abs(axisy[2]) > Math.abs(axisy[0]) && Math.abs(axisy[2]) > Math.abs(axisy[1])) { 
+				// Z component is greatest, axisy must be most similar to 0,0,1 or 0,0,-1
+				// (i.e. camera is horizontally mounted, facing mostly vertically up or down)
+
+				// let's use an orthogonal reference axis of 1,0,0
+				// no matter what orientation, this will *always* result in axisz.x == 0
+				other_axis = [1, 0, 0]
+				
+			} else if (Math.abs(axisy[1]) > Math.abs(axisy[0]) && Math.abs(axisy[1]) > Math.abs(axisy[2])) { 
+				// Y component is greatest, axisy must be most similar to 0,1,0 or 0,-1,0
+				// (i.e. camera is close to a "normal" orientation facing in a horizontal plane)
+
+				// let's use an orthogonal reference axis of 1,0,0
+				// no matter what orientation, this will *always* result in axisz.x == 0
+				other_axis = [1, 0, 0]
+				
+			} else {
+				// X component is greatest, axisy must be most similar to 1,0,0 or -1,0,0
+				// (i.e. camera is vertically positioned and looking in a horizontal plane, but twisted sideways around its point of view)
+
+				other_axis = [0, 0, 1]
+			}
+
+			// other_axis = [axisy[1], axisy[2], axisy[0]]
+			// other_axis = [axisy[2], axisy[0], axisy[1]]
+
+			// there's also two ways to generate the frame: z first, or x first
+			
+			if ((t % 1) < 0.3) {
+				axisz = vec3.cross(vec3.create(), axisy, other_axis)
+				vec3.normalize(axisz, axisz)
+				axisx = vec3.cross(vec3.create(), axisz, axisy)
+				vec3.normalize(axisx, axisx)
+			} else {
+				axisx = vec3.cross(vec3.create(), axisy, other_axis)
+				vec3.normalize(axisx, axisx)
+				axisz = vec3.cross(vec3.create(), axisx, axisy)
+				vec3.normalize(axisz, axisz)
+			}
+
+            let cammatrix = mat4.set(mat4.create(), 
 				axisx[0], axisx[1], axisx[2], 0.,
 				axisy[0], axisy[1], axisy[2], 0.,
 				axisz[0], axisz[1], axisz[2], 0.,
 				0, 0, 0, 1);
-            // this process has probably left our axisx and axisz not properly rotated to the XZ plane anymore
-            // I'd like to rotateY to ensure that axisx is maximal in +x
-            // get the rotation around Y that would make axisx.x maximal:
-            let m = mat4.create()
-            //mat4.fromRotation(m, Math.acos(cammatrix[0]), [0, 1, 0])
-            mat4.multiply(cammatrix, m, cammatrix)
+			// let cammatrix = mat4.set(mat4.create(), 
+			// 	axisx[0], axisy[0], axisz[0], 0.,
+			// 	axisx[1], axisy[1], axisz[1], 0.,
+			// 	axisx[2], axisy[2], axisz[2], 0.,
+			// 	0, 0, 0, 1);
+
+			// console.log("y", axisy.join(",, "))
+			// console.log("x", axisx.join(",, "))
+			// console.log("z", axisz.join(",, "))
 
             // now generate our camera's modelmatrix
             mat4.identity(modelmatrix_cam)
-            mat4.translate(modelmatrix_cam, modelmatrix_cam, camera_pos)
-            mat4.rotateY(modelmatrix_cam, modelmatrix_cam, camera_rotation)
+            // mat4.translate(modelmatrix_cam, modelmatrix_cam, camera_pos)
+            // mat4.rotateY(modelmatrix_cam, modelmatrix_cam, camera_rotation)
             //mat4.multiply(modelmatrix_cam, modelmatrix_cam, cammatrix)
-            mat4.multiply(modelmatrix_cam, cammatrix, modelmatrix_cam)
+            //mat4.multiply(modelmatrix_cam, cammatrix, modelmatrix_cam)
+
+			//mat4.rotateZ(modelmatrix_cam, -zrot)
+			mat4.multiply(modelmatrix_cam, modelmatrix_cam, x_mat)
 		}
 
 		points.bind().submit()
