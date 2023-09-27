@@ -364,7 +364,10 @@ int wrap(int a, int n) {
 		// apply transform:
 		for (int i=0; i<num_vertices; i++) {
 			glm::vec3& v = vertices[i];
-			v = glm::vec3(transform * glm::vec4(v, 1.));
+			// flip to ogl coordinate system
+			v = glm::vec3(transform * glm::vec4(v.x, -v.y, -v.z, 1.));
+
+			
 
 			// meshless index array:
 			if (!createMesh && v.x > min.x && v.y > min.y && v.z > min.z && v.x < max.x && v.y < max.y && v.z < max.z) {

@@ -81,7 +81,7 @@ window.draw = function() {
 			if (true || t < 10) {
 				let calib = calibration[cam.serial]
 				if (calib) Object.assign(cam, calib)
-				cam.calibrate(cam.pos, cam.rotation)
+				cam.calibrate(cam.pos, cam.rotation, 0.1, cam.upsidedown)
 			}
 	
 			cam.points_vao.bind().submit()
@@ -95,9 +95,9 @@ window.draw = function() {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	mat4.identity(viewmatrix)
-	let a = t * 1
+	let a = Math.sin(t)
 	let z = -1
-	let r = 2
+	let r = 4
 	let h = 1 // height of rendering camera above ground
 	let at = [0, h, z]
 	let eye = [Math.sin(a), 0, Math.cos(a)]
@@ -114,7 +114,7 @@ window.draw = function() {
 	let shader = shaderman.shaders.cloud.begin()
 	.uniform ( "u_viewmatrix", viewmatrix)
 	.uniform ( "u_projmatrix", projmatrix)
-	.uniform ( "u_pixelsize", dim[1] / 500)
+	.uniform ( "u_pixelsize", dim[1] / 100)
 	cameras.forEach((cam, i) => {
 		shader.uniform( "u_color", [i, 1-i, 1, 1])
 		cam.points_vao.bind().drawPoints().unbind()
